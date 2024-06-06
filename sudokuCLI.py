@@ -1,6 +1,7 @@
 import click
 from sudoku import SudokuV1
 import csv
+import logging
 
 @click.group(invoke_without_command=True)
 @click.option("--command", prompt=">")
@@ -13,8 +14,10 @@ def cli(ctx, command):
         ctx.invoke(cmd)
     except click.exceptions.Abort:
         raise click.exceptions.Abort()
-    except:
-        print("got command " + str(cmd) + " and didn't recognize it")
+    except Exception as e:
+        logger.error("caught an exception: %s", e)
+        logger.error("during command %s", cmd)
+        print("got error during command " + str(cmd))
         print(help_str)
 
 help_str = """
@@ -28,6 +31,7 @@ valid commands:
 \t    then it is the final value, not just the last remaining possibility.
 \tf - Read in a file of initial values.
 \te - Evaluate the Grid with the rules.
+\tdebug - set logger to debug.
 \th - Print out this help.
 \tq - Quit.
 """
@@ -42,9 +46,8 @@ def command1():
 
 @cli.command(name='f')
 def readFile():
-    #print('in readFile')
     inputFile = click.prompt('input', type=click.STRING)
-    #print('input file is ' + str(inputFile))
+    logger.debug('input file is %s', str(inputFile))
     with open (inputFile, newline='') as csvFile:
         reader = csv.reader(csvFile)
         for row in reader:
@@ -57,7 +60,6 @@ def evaluateGrid():
 
 @cli.command(name='p')
 def gridPrint():
-    print("printing grid")
     print(myGrid.pretty_print())
 
 @cli.command(name='q')
@@ -68,6 +70,10 @@ def quitapp():
 @cli.command(name='h')
 def help():
     print(help_str)
+    
+@cli.command(name='debug')
+def setDebug():
+    logger.setLevel(logging.DEBUG)
 
 def main():
     while True:
@@ -75,6 +81,12 @@ def main():
             cli.main(standalone_mode=False)
         except click.exceptions.Abort:
             break
+
+logging.basicConfig(filename='SudokuSolver.log',
+                    format='%(asctime)s %(message)s',
+                    filemode='w')
+logger = logging.getLogger()
+logger.setLevel(logging.ERROR)
 
 myGrid = SudokuV1.Grid()
                                     
