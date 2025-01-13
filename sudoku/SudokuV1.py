@@ -1,5 +1,8 @@
 import queue
 import logging
+import csv
+from .Element import Element
+from .ElementCollection import ElementCollection
 
 """
 This is some of the first musings on how to solve a sudoku puzzle.
@@ -20,215 +23,6 @@ Each element needs to:
     
 """
 
-class Element:
-    def __init__(self, row, column, eventQ):
-        self.values = {1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:"", 9:""}
-        self.final = False
-        self.row = row
-        self.column = column
-        self.events = eventQ
-
-    def set(self, value):
-        if self.member(value):
-            self.values.clear()
-            self.values.setdefault(value,"")
-            # log this change to the event queue
-            self.events.put(["set", self.row, self.column, value])
-            logger.debug("Element.set(): set %s, %s to %s", self.row, self.column, value)
-        else:
-            logger.error("Element.set(): Value %s is not valid in %s, %s", str(value), str(self.row), str(self.column))
-
-    #
-    # remove the value from the possible values list in this element
-    # DO NOT remove the last value
-    # If value not in possible value list, do not care, just exit.
-    #
-    def remove(self, value):
-        if self.cardinality() != 1:
-            if self.member(value):
-                self.values.pop(value)
-                # log this change to the event queue
-                self.events.put(["remove", self.row, self.column, value])
-                logger.debug("Element.remove(): removed %s from %s, %s", value, self.row, self.column)
-        return
-
-    def cardinality(self):
-        return len(self.values)
-
-    def member(self, value):
-        return self.values.get(value) != None
-        
-    def isFinalValue(self, value):
-        if self.final and self.member(value):
-            return True
-        return False
-    
-    # third - which third to print out
-    #         valid range: 1-3
-    # if value is final, print out that value in the center
-    def printThird(self, third):
-        upperRange = third * 3
-        return_string = ""
-        if self.final:
-            if third == 2:
-                finalVal = self.values.popitem()[0]
-                return_string += "*" + str(finalVal) + "*"
-                self.values.setdefault(finalVal,"")
-            else:
-                return_string += "   "
-        else:
-            for val in range(upperRange-2,upperRange+1):
-                if self.member(val):
-                    return_string += str(val)
-                else:
-                    return_string += " "
-        return_string += " "
-        return return_string
-
-    def __str__(self):
-        return f"{self.row},{self.column}: {list(self.values.keys())}"
-
-class ElementCollection:
-    def __init__(self, id, type, grid):
-        self.id = id
-        self.type = type
-        self.grid = grid
-        self.elements = []
-        
-    def append_element(self, element):
-        self.elements.append(element)
-        
-    def checkIfAlreadySet(self, value):
-        alreadySet = False
-        for element in self.elements.__iter__():
-            if element.isFinalValue(value):
-                alreadySet = True
-                break
-        return alreadySet
-        
-    def getRow(self, indx):
-        if indx < 0 or indx > 8: logger.error("getRow: indx out of range %s", indx); exit()
-        if self.type == "Row": return self.id
-        elif self.type == "Col": return indx
-        else:
-            rowMult = self.id // 3
-            rowAdd = indx // 3
-            return rowMult * 3 + rowAdd
-            
-    def getCol(self, indx):
-        if indx < 0 or indx > 8: logger.error("getCol: indx out of range %s", indx); exit()
-        if self.type == "Col": return self.id
-        elif self.type == "Row": return indx
-        else:
-            colMult = self.id % 3
-            colAdd = indx % 3
-            return colMult * 3 + colAdd
-
-    def removeVal(self, val):
-        for indx in range(9):
-            self.elements[indx].remove(val)
-            
-    #
-    # an element has only one possible value left
-    # i.e. row: [1, 23, 34, 45, 56, 67, 78, 89, 19]
-    #      set position 1 to 1 and "finalize it"
-    #      remove 1 as a possible value in the rest of the row
-    #
-    def singleValueRule(self):
-        singleValues = []
-        for indx in range(9):
-            # if it is already final, than we have already processed this one.
-            # CANT do above, there are 3 element collections. This will stop 2 of them from working.
-            # Will have to live with possible duplication rule checks.
-            if self.elements[indx].cardinality() == 1:
-                singleVal = list(self.elements[indx].values.keys())[0]
-                singleValues.append(singleVal)
-                if not self.elements[indx].final:
-                    logger.debug("SVR: setting %s %s, indx %s to %s", self.type, self.id, indx, singleVal)
-                    self.grid.setValue(self.getRow(indx), self.getCol(indx), singleVal)
-
-    #
-    # a row, col or sub-grid has a value possible in only one location
-    # i.e. row: [123, 234, 234, 345, 345, 456, 456, 567, 567]
-    #      position 0 MUST be 1 since that is the only possible location for 1
-    # remove that value from the rest of the row, col, sub-grid
-    #
-    def singlePossibleValueRule(self):
-        # possibleValue: for each possible value (1-9), mark in which position found
-        # if value found in more than one position, mark with "x"
-        possibleValues = {1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:"", 9:""}
-        # find single values
-        for indx in range(9):
-            values = list(self.elements[indx].values.keys())
-            final = self.elements[indx].final
-            if final:
-                continue
-            for val in values.__iter__():
-                if possibleValues[val] == "":
-                    possibleValues[val] = indx
-                elif possibleValues[val] != "":
-                    possibleValues[val] = "x"
-        # mark the single values
-        for indx in range(1,10):
-            value = possibleValues.get(indx)
-            if value != "x" and value != "" and value != None:
-                logger.debug("SPVR: %s %s", self.type, self.id)
-                logger.debug("values: \n%s", str(self))
-                logger.debug("computed SPVs: %s", possibleValues)
-                logger.debug("SPVR in %s %s: %s can only be at position %s", self.type, self.id, indx, value)
-                self.grid.setValue(self.getRow(value), self.getCol(value), indx)
-    
-    #
-    # a row, col, or sub-grid has 2 elements with only the same 2 possible values left
-    # i.e. 3,5 appears twice in one row, col, sub-grid
-    # remove those values from the rest of the row, col, or sub-grid
-    #
-    def nakedDoubleValueRule(self):
-        # dictionary key=str(double value tuple), value=# of occurences
-        doubleValues = {}
-        foundOne = False
-        #print("in DVR")
-        # find elements with 2 values
-        for indx in range(9):
-            if self.elements[indx].cardinality() == 2:
-                valueList = list(self.elements[indx].values.keys())
-                valueTuple = (valueList[0], valueList[1])
-                #print("found element with these two values: " + str(valueTuple))
-                #print("current doubleValues dict: " + str(doubleValues))
-                existingValue = doubleValues.get(str(valueTuple))
-                if existingValue == None:
-                    #print("was the first time")
-                    doubleValues[str(valueTuple)] = 1
-                else:
-                    logger.debug("nDVR: in %s, %s found tuple %s", self.type, self.id, str(valueTuple))
-                    doubleValues[str(valueTuple)] = existingValue+1
-                    foundOne = True
-        # remove the two values from the rest of the elements
-        if foundOne:
-            #print("removing values " + str(valueTuple) + " from " + self.type + " " + str(self.id))
-            for doubleValueKey in doubleValues:
-                #print("doubleValueKey: ", doubleValueKey, " type: ", type(doubleValueKey))
-                #print("doubleValues: ", doubleValues)
-                if doubleValues[doubleValueKey] == 2:
-                    for indx in range(len(self.elements)):
-                        valueList = list(self.elements[indx].values.keys())
-                        #print("element " + str(self.elements[indx].row) + "," + str(self.elements[indx].column) + " : " + str(self.elements[indx].values))
-                        #print("valueList is " + str(valueList) + ", doubleValueKey is " + str(doubleValueKey))
-                        if not (len(valueList) == 2 and doubleValueKey != (valueList[0], valueList[1])):
-                            #print("removing " + str(doubleValueKey) + " from element")
-                            # touple string is: "(a, b)"
-                            # a = touple[1], b = touple[4]
-                            self.elements[indx].remove(int(doubleValueKey[1]))
-                            self.elements[indx].remove(int(doubleValueKey[4]))
-                        logger.debug("nDVR: after removal: values are\n%s", str(self.elements[indx].values))
-    
-    
-    def __str__(self):
-        return_string = ""
-        for element in self.elements.__iter__():
-            return_string += element.__str__() + "\n"
-        return return_string
-
 '''
 Grid layout:
 Col    0 1 2  3 4 5  6 7 8
@@ -247,21 +41,35 @@ Row 8 |  6   |  7   |  8   |
       +------+------+------+
 '''
 class Grid:
+    """
+    Represents a Sudoku grid and provides methods to manipulate and solve it.
+    """
     def __init__(self):
+        """
+        Initializes an empty 9x9 Sudoku grid with rows, columns, and sub-grids.
+        """
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
         self.Cols = []
         self.Rows = []
         self.SubGrid = []
         self.events = queue.Queue()
         # create empty grid
         for indx in range(9):
-            self.Rows.append(ElementCollection(indx, "Row", self))
-            self.Cols.append(ElementCollection(indx, "Col", self))
-            self.SubGrid.append(ElementCollection(indx, "SubGrid", self))
+            self.Rows.append(ElementCollection(indx, "Row", self, self.logger))
+            self.Cols.append(ElementCollection(indx, "Col", self, self.logger))
+            self.SubGrid.append(ElementCollection(indx, "SubGrid", self, self.logger))
         # create all 81 elements
         # place them in the right row, column, and sub grid
         for row in range(9):
             for col in range(9):
-                el = Element(row, col, self.events)
+                el = Element(row, col, self.events, self.logger)
                 self.Rows[row].append_element(el)
                 self.Cols[col].append_element(el)
                 self.SubGrid[self.subGridIndex(row,col)].append_element(el)
@@ -272,9 +80,17 @@ class Grid:
     # any row, column or sub-grid.
     #
     def setValue(self, row, col, val):
-        if row < 0 or row > 8: logger.error("row index out of range: %s", row); exit()
-        if col < 0 or col > 8: logger.error("col index out of range: %s", col); exit()
-        if val < 1 or val > 9: logger.error("val out of range: %s", val); exit()
+        """
+        Sets a value in the grid at the specified row and column.
+        
+        Args:
+            row (int): The row index (0-8).
+            col (int): The column index (0-8).
+            val (int): The value to set (1-9).
+        """
+        if row < 0 or row > 8: self.logger.error("row index out of range: %s", row); exit()
+        if col < 0 or col > 8: self.logger.error("col index out of range: %s", col); exit()
+        if val < 1 or val > 9: self.logger.error("val out of range: %s", val); exit()
 
         rowAlreadySet = self.Rows[row].checkIfAlreadySet(val)
         colAlreadySet = self.Cols[col].checkIfAlreadySet(val)
@@ -283,27 +99,34 @@ class Grid:
             self.Rows[row].elements[col].set(val)
             self.Rows[row].elements[col].final = True
         else:
-            logger.error("cannot set %s, %s to %s", row, col, val)
-            if rowAlreadySet: logger.error("row already has %s", val)
-            if colAlreadySet: logger.error("col already has %s", val)
-            if sgAlreadySet: logger.error("sub grid already has %s", val)
+            self.logger.error("cannot set %s, %s to %s", row, col, val)
+            if rowAlreadySet: self.logger.error("row already has %s", val)
+            if colAlreadySet: self.logger.error("col already has %s", val)
+            if sgAlreadySet: self.logger.error("sub grid already has %s", val)
             exit()
             
         self.cleanUpFromSet(row, col, val)
 
-    #
-    # when an element is set to a value, remove that value from the rest of the
-    # row, col, subGrid it is in
-    #
     def cleanUpFromSet(self, row, col, val):
+        """
+        Removes a value from the rest of the row, column, and sub-grid after setting it.
+        
+        Args:
+            row (int): The row index.
+            col (int): The column index.
+            val (int): The value to remove.
+        """
         self.Rows[row].removeVal(val)
         self.Cols[col].removeVal(val)
         self.SubGrid[self.subGridIndex(row,col)].removeVal(val)    
 
-    #
-    # return true if all values in grid are "final"
-    #            
     def isSolved(self):
+        """
+        Checks if the Sudoku grid is completely solved.
+        
+        Returns:
+            bool: True if the grid is solved, False otherwise.
+        """
         solved = True
         for col in self.Cols.__iter__():
             for element in col.elements.__iter__():
@@ -319,6 +142,12 @@ class Grid:
     # that value possibility can be removed from the rest of the row or column.
     #
     def pointingPairsRule(self, subGrid):
+        """
+        Applies the pointing pairs rule to a sub-grid.
+        
+        Args:
+            subGrid (ElementCollection): The sub-grid to apply the rule to.
+        """
         if subGrid.type != "SubGrid":
             return
         
@@ -337,9 +166,9 @@ class Grid:
                 rows[val][row] = rows[val][row] + 1
                 cols[val][col] = cols[val][col] + 1
 
-        logger.debug("grid %s", subGrid.id)
-        logger.debug("PPR: rows: %s", rows)
-        logger.debug("PPR: cols: %s", cols)
+        self.logger.debug("grid %s", subGrid.id)
+        self.logger.debug("PPR: rows: %s", rows)
+        self.logger.debug("PPR: cols: %s", cols)
 
         # look for [>1,0,0] (in any order)
         rowPairs = {}
@@ -356,15 +185,15 @@ class Grid:
             if colList[0] == 0 and colList[2] == 0 and colList[1] > 1: colPairs[indx] = 1; foundCol = True
             if colList[1] == 0 and colList[2] == 0 and colList[0] > 1: colPairs[indx] = 0; foundCol = True
 
-        logger.debug("PPR: rowPairs: %s", rowPairs)
-        logger.debug("PPR: colPairs: %s", colPairs)
+        self.logger.debug("PPR: rowPairs: %s", rowPairs)
+        self.logger.debug("PPR: colPairs: %s", colPairs)
             
         # if pairs found, remove values from rows and columns
         for rowVal in rowPairs:
             rowIndex = (subGrid.id // 3) * 3 + rowPairs[rowVal]
             colIndex = subGrid.id % 3
             rowCollction = self.Rows[rowIndex]
-            logger.debug("PPR: removing %s from row %s", rowVal, rowIndex)
+            self.logger.debug("PPR: removing %s from row %s", rowVal, rowIndex)
             for indx in range(9):
                 if indx // 3 != colIndex:
                     rowCollction.elements[indx].remove(rowVal)
@@ -372,7 +201,7 @@ class Grid:
             colIndex = (subGrid.id % 3) * 3 + colPairs[colVal]
             rowIndex = subGrid.id // 3
             colCollction = self.Cols[colIndex]
-            logger.debug("PPR: removing %s from column %s", colVal, colIndex)
+            self.logger.debug("PPR: removing %s from column %s", colVal, colIndex)
             for indx in range(9):
                 if indx // 3 != rowIndex:
                     colCollction.elements[indx].remove(colVal)
@@ -386,6 +215,9 @@ class Grid:
     # when no new actions are found the evaluation quits.
     # 
     def evaluate(self):
+        """
+        Evaluates the Sudoku grid and applies rules to solve it.
+        """
         # check to see if solved. can exit early with some events left.
         while self.events.not_empty and not self.isSolved():
             try:
@@ -393,7 +225,7 @@ class Grid:
                 # Reactive Rules - rules that are tirggered by some other action
                 #
                 event = self.events.get(block=False)
-                logger.debug("evaluating: %s", event)
+                self.logger.debug("evaluating: %s", event)
                 name = event[0]
                 row = event[1]
                 col = event[2]
@@ -429,10 +261,10 @@ class Grid:
                     self.SubGrid[indx].nakedDoubleValueRule()
 
                     # for debug purposes
-                    logger.debug("\n%s",self.pretty_print())
+                    self.logger.debug("\n%s",self.pretty_print())
                     self.pointingPairsRule(self.SubGrid[indx])                
                     # for debug purposes
-                    logger.debug("\n%s", self.pretty_print())
+                    self.logger.debug("\n%s", self.pretty_print())
 
                 # if no changes, quit
                 if self.events.empty():                
@@ -442,18 +274,36 @@ class Grid:
             print("SOLVED IT!")
     
     def printCols(self):
+        """
+        Prints the columns of the Sudoku grid.
+        
+        Returns:
+            str: A string representation of the columns.
+        """
         return_string = ""
         for col in self.Cols.__iter__():
             return_string += str(col) + "\n"
         return return_string
         
     def printSubGrid(self):
+        """
+        Prints the sub-grids of the Sudoku grid.
+        
+        Returns:
+            str: A string representation of the sub-grids.
+        """
         return_string = ""
         for sub in self.SubGrid.__iter__():
             return_string += str(sub) + "\n"
         return return_string
 
     def pretty_print(self):
+        """
+        Prints the Sudoku grid in a pretty format.
+        
+        Returns:
+            str: A string representation of the grid.
+        """
         return_string = ""
         for row in self.Rows.__iter__():
             for indx in range(1,4):
@@ -464,13 +314,28 @@ class Grid:
         return return_string
     
     def __str__(self):
+        """
+        Returns a string representation of the Sudoku grid.
+        
+        Returns:
+            str: A string representation of the grid.
+        """
         return_string = ""
         for row in self.Rows.__iter__():
             return_string += str(row) + "\n"
         return return_string
     
-    # given row and column, comput which sub-grid you are in
     def subGridIndex(self, row, col):
+        """
+        Computes the sub-grid index for a given row and column.
+        
+        Args:
+            row (int): The row index.
+            col (int): The column index.
+        
+        Returns:
+            int: The sub-grid index.
+        """
         indx = col // 3 + 3 * (row // 3)
         return indx
 
@@ -573,5 +438,4 @@ if __name__ == "__main__":
     #print("\n")
     print(SudGrid.pretty_print())
     '''
-    
-    
+
