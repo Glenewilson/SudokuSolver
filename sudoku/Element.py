@@ -1,25 +1,25 @@
 import logging
 
+logger = logging.getLogger(__name__)
+
 class Element:
     """
     Represents an element in a Sudoku grid.
     """
-    def __init__(self, row, column, eventQ, logger):
+    def __init__(self, row, column, eventQ):
         """
-        Initializes an Element with a row, column, event queue, and logger.
+        Initializes an Element with a row, column, and event queue.
         
         Args:
             row (int): The row index of the element.
             column (int): The column index of the element.
             eventQ (queue.Queue): The event queue for logging changes.
-            logger (logging.Logger): The logger for logging messages.
         """
         self.values = {1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:"", 9:""}
         self.final = False
         self.row = row
         self.column = column
         self.events = eventQ
-        self.logger = logger
 
     def set(self, value):
         """
@@ -33,9 +33,9 @@ class Element:
             self.values.setdefault(value,"")
             # log this change to the event queue
             self.events.put(["set", self.row, self.column, value])
-            self.logger.debug("Element.set(): set %s, %s to %s", self.row, self.column, value)
+            logger.debug("Element.set(): set %s, %s to %s", self.row, self.column, value)
         else:
-            self.logger.error("Element.set(): Value %s is not valid in %s, %s", str(value), str(self.row), str(self.column))
+            logger.error("Element.set(): Value %s is not valid in %s, %s", str(value), str(self.row), str(self.column))
 
     def remove(self, value):
         """
@@ -49,7 +49,7 @@ class Element:
                 self.values.pop(value)
                 # log this change to the event queue
                 self.events.put(["remove", self.row, self.column, value])
-                self.logger.debug("Element.remove(): removed %s from %s, %s", value, self.row, self.column)
+                logger.debug("Element.remove(): removed %s from %s, %s", value, self.row, self.column)
         return
 
     def cardinality(self):

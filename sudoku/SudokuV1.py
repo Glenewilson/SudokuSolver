@@ -4,6 +4,8 @@ import csv
 from .Element import Element
 from .ElementCollection import ElementCollection
 
+logger = logging.getLogger(__name__)
+
 """
 This is some of the first musings on how to solve a sudoku puzzle.
 
@@ -48,28 +50,20 @@ class Grid:
         """
         Initializes an empty 9x9 Sudoku grid with rows, columns, and sub-grids.
         """
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
-        handler = logging.StreamHandler()
-        handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-
         self.Cols = []
         self.Rows = []
         self.SubGrid = []
         self.events = queue.Queue()
         # create empty grid
         for indx in range(9):
-            self.Rows.append(ElementCollection(indx, "Row", self, self.logger))
-            self.Cols.append(ElementCollection(indx, "Col", self, self.logger))
-            self.SubGrid.append(ElementCollection(indx, "SubGrid", self, self.logger))
+            self.Rows.append(ElementCollection(indx, "Row", self))
+            self.Cols.append(ElementCollection(indx, "Col", self))
+            self.SubGrid.append(ElementCollection(indx, "SubGrid", self))
         # create all 81 elements
         # place them in the right row, column, and sub grid
         for row in range(9):
             for col in range(9):
-                el = Element(row, col, self.events, self.logger)
+                el = Element(row, col, self.events)
                 self.Rows[row].append_element(el)
                 self.Cols[col].append_element(el)
                 self.SubGrid[self.subGridIndex(row,col)].append_element(el)
@@ -88,9 +82,12 @@ class Grid:
             col (int): The column index (0-8).
             val (int): The value to set (1-9).
         """
-        if row < 0 or row > 8: self.logger.error("row index out of range: %s", row); exit()
-        if col < 0 or col > 8: self.logger.error("col index out of range: %s", col); exit()
-        if val < 1 or val > 9: self.logger.error("val out of range: %s", val); exit()
+        if not isinstance(row, int) or not isinstance(col, int) or not isinstance(val, int):
+            logger.error("Invalid input types: row, col, and val must be integers")
+            return
+        if row < 0 or row > 8: logger.error("row index out of range: %s", row); return
+        if col < 0 or col > 8: logger.error("col index out of range: %s", col); return
+        if val < 1 or val > 9: logger.error("val out of range: %s", val); return
 
         rowAlreadySet = self.Rows[row].checkIfAlreadySet(val)
         colAlreadySet = self.Cols[col].checkIfAlreadySet(val)
@@ -99,11 +96,11 @@ class Grid:
             self.Rows[row].elements[col].set(val)
             self.Rows[row].elements[col].final = True
         else:
-            self.logger.error("cannot set %s, %s to %s", row, col, val)
-            if rowAlreadySet: self.logger.error("row already has %s", val)
-            if colAlreadySet: self.logger.error("col already has %s", val)
-            if sgAlreadySet: self.logger.error("sub grid already has %s", val)
-            exit()
+            logger.error("cannot set %s, %s to %s", row, col, val)
+            if rowAlreadySet: logger.error("row already has %s", val)
+            if colAlreadySet: logger.error("col already has %s", val)
+            if sgAlreadySet: logger.error("sub grid already has %s", val)
+            return
             
         self.cleanUpFromSet(row, col, val)
 
@@ -166,9 +163,9 @@ class Grid:
                 rows[val][row] = rows[val][row] + 1
                 cols[val][col] = cols[val][col] + 1
 
-        self.logger.debug("grid %s", subGrid.id)
-        self.logger.debug("PPR: rows: %s", rows)
-        self.logger.debug("PPR: cols: %s", cols)
+        logger.debug("grid %s", subGrid.id)
+        logger.debug("PPR: rows: %s", rows)
+        logger.debug("PPR: cols: %s", cols)
 
         # look for [>1,0,0] (in any order)
         rowPairs = {}
@@ -185,15 +182,15 @@ class Grid:
             if colList[0] == 0 and colList[2] == 0 and colList[1] > 1: colPairs[indx] = 1; foundCol = True
             if colList[1] == 0 and colList[2] == 0 and colList[0] > 1: colPairs[indx] = 0; foundCol = True
 
-        self.logger.debug("PPR: rowPairs: %s", rowPairs)
-        self.logger.debug("PPR: colPairs: %s", colPairs)
+        logger.debug("PPR: rowPairs: %s", rowPairs)
+        logger.debug("PPR: colPairs: %s", colPairs)
             
         # if pairs found, remove values from rows and columns
         for rowVal in rowPairs:
             rowIndex = (subGrid.id // 3) * 3 + rowPairs[rowVal]
             colIndex = subGrid.id % 3
             rowCollction = self.Rows[rowIndex]
-            self.logger.debug("PPR: removing %s from row %s", rowVal, rowIndex)
+            logger.debug("PPR: removing %s from row %s", rowVal, rowIndex)
             for indx in range(9):
                 if indx // 3 != colIndex:
                     rowCollction.elements[indx].remove(rowVal)
@@ -201,7 +198,7 @@ class Grid:
             colIndex = (subGrid.id % 3) * 3 + colPairs[colVal]
             rowIndex = subGrid.id // 3
             colCollction = self.Cols[colIndex]
-            self.logger.debug("PPR: removing %s from column %s", colVal, colIndex)
+            logger.debug("PPR: removing %s from column %s", colVal, colIndex)
             for indx in range(9):
                 if indx // 3 != rowIndex:
                     colCollction.elements[indx].remove(colVal)
@@ -225,7 +222,7 @@ class Grid:
                 # Reactive Rules - rules that are tirggered by some other action
                 #
                 event = self.events.get(block=False)
-                self.logger.debug("evaluating: %s", event)
+                logger.debug("evaluating: %s", event)
                 name = event[0]
                 row = event[1]
                 col = event[2]
@@ -261,10 +258,10 @@ class Grid:
                     self.SubGrid[indx].nakedDoubleValueRule()
 
                     # for debug purposes
-                    self.logger.debug("\n%s",self.pretty_print())
+                    logger.debug("\n%s",self.pretty_print())
                     self.pointingPairsRule(self.SubGrid[indx])                
                     # for debug purposes
-                    self.logger.debug("\n%s", self.pretty_print())
+                    logger.debug("\n%s", self.pretty_print())
 
                 # if no changes, quit
                 if self.events.empty():                
@@ -339,103 +336,30 @@ class Grid:
         indx = col // 3 + 3 * (row // 3)
         return indx
 
-# utility function for unit testing
-def setAValue(r, c, v):
-    row = r-1
-    col = c-1
-    val = v
-    SudGrid.setValue(row, col, val)
-
-# creating a global variable
-SudGrid = Grid()
-logging.basicConfig(filename='SudokuV1Debug.log',
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.DEBUG)
-
-if __name__ == "__main__":
-    '''
-    # some unit testing
-    El1 = Element(1,1)
-    print(El1)
-    print(El1.cardinality())
-    print("is 9 in element? ", {El1.member(9)})
-    El1.remove(9)
-    print(El1)
-    print(El1.cardinality())
-    print("is 9 in element? ", {El1.member(9)})
-    El1.set(5)
-    print("set to a value")
-    print(El1)
-    
-    Row1 = ElementCollection(1)
-    Row1.append_element(El1)
-    print(Row1.elements[0])
-    print(Row1)
-    Row1.elements[0].remove(8)
-    print(Row1)
-    print(El1)
-    
-    mylist = ["a", "b"]
-    mytuple = (mylist[0], mylist[1])
-    
-    print("mylist: " + str(mylist))
-    print("mytupe: " + str(mytuple))
-    
-    mydict = {}
-    myval = mydict.get(str(mytuple))
-    print("myval: " + str(myval))
-    mydict[str(mytuple)] = 1
-    myval = mydict[str(mytuple)]
-    print("myval: " + str(myval))
-    '''
-    
-    #SudGrid = Grid()
-    #print(SudGrid)
-    
-    #SudGrid.setValue()
-    setAValue(1,1,3)
-    setAValue(1,5,2)
-    setAValue(1,9,1)
-    setAValue(2,5,4)
-    setAValue(3,2,5)
-    setAValue(3,4,8)
-    setAValue(4,2,3)
-    setAValue(4,5,7)
-    setAValue(4,7,6)
-    setAValue(4,9,5)
-    setAValue(5,2,6)
-    setAValue(5,6,8)
-    setAValue(5,7,2)
-    setAValue(5,9,9)
-    setAValue(6,1,5)
-    setAValue(6,3,8)
-    setAValue(6,4,1)
-    setAValue(7,8,9)
-    setAValue(8,2,1)
-    setAValue(8,3,5)
-    setAValue(8,6,7)
-    setAValue(9,3,7)
-    setAValue(9,4,9)
-    setAValue(9,7,5)
-    print(SudGrid.pretty_print())
-    SudGrid.evaluate()
-    print(SudGrid.pretty_print())
-
-    '''
-    for subGrid in range(9):
-        for indx in range(9):
-            val = SudGrid.SubGrid[subGrid].getCol(indx)
-            print("subgrid", subGrid, "indx", indx, "col is", val)
-            val = SudGrid.SubGrid[subGrid].getRow(indx)
-            print("subgrid", subGrid, "indx", indx, "row is", val)
-    
-    print("setting 1,1 to 5")
-    SudGrid.setValue(1,1,5)
-    #print(SudGrid)
-    #print("\n")
-    print(SudGrid.pretty_print())
-    '''
-
+    def load_grid(self, filepath):
+        """
+        Loads a Sudoku grid from a CSV file.
+        
+        Args:
+            filepath (str): The path to the CSV file.
+        """
+        if not isinstance(filepath, str):
+            logger.error("Invalid input type: filepath must be a valid file path")
+            return
+        try:
+            with open(filepath, mode='r') as file:
+                csv_reader = csv.reader(file)
+                for row in csv_reader:
+                    if len(row) != 3:
+                        logger.error("Invalid row in CSV file: %s", row)
+                        continue
+                    if (row[0] > 9 or row[0] < 1) or (row[1] > 9 or row[1] < 1) or (row[2] > 9 or row[2] < 1):
+                        logger.error("Invalid value in CSV file: %s", row)
+                        continue
+                    try:
+                        r, c, v = int(row[0]), int(row[1]), int(row[2])
+                        self.setValue(r - 1, c - 1, v)
+                    except ValueError as e:
+                        logger.error("Error parsing row %s: %s", row, e)
+        except FileNotFoundError as e:
+            logger.error("File not found: %s", e)

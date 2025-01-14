@@ -1,10 +1,12 @@
 import logging
 
+logger = logging.getLogger(__name__)
+
 class ElementCollection:
     """
     Represents a collection of elements in a Sudoku grid (row, column, or sub-grid).
     """
-    def __init__(self, id, type, grid, logger):
+    def __init__(self, id, type, grid):
         """
         Initializes an ElementCollection with an ID, type, and reference to the grid.
         
@@ -17,7 +19,6 @@ class ElementCollection:
         self.type = type
         self.grid = grid
         self.elements = []
-        self.logger = logger
         
     def append_element(self, element):
         """
@@ -55,7 +56,7 @@ class ElementCollection:
         Returns:
             int: The row index.
         """
-        if indx < 0 or indx > 8: self.logger.error("getRow: indx out of range %s", indx); exit()
+        if indx < 0 or indx > 8: logger.error("getRow: indx out of range %s", indx); exit()
         if self.type == "Row": return self.id
         elif self.type == "Col": return indx
         else:
@@ -73,7 +74,7 @@ class ElementCollection:
         Returns:
             int: The column index.
         """
-        if indx < 0 or indx > 8: self.logger.error("getCol: indx out of range %s", indx); exit()
+        if indx < 0 or indx > 8: logger.error("getCol: indx out of range %s", indx); exit()
         if self.type == "Col": return self.id
         elif self.type == "Row": return indx
         else:
@@ -94,6 +95,7 @@ class ElementCollection:
     def singleValueRule(self):
         """
         Applies the single value rule to the collection.
+        It looks for values that can only be in one position in the collection.
         """
         singleValues = []
         for indx in range(9):
@@ -101,12 +103,13 @@ class ElementCollection:
                 singleVal = list(self.elements[indx].values.keys())[0]
                 singleValues.append(singleVal)
                 if not self.elements[indx].final:
-                    self.logger.debug("SVR: setting %s %s, indx %s to %s", self.type, self.id, indx, singleVal)
+                    logger.debug("SVR: setting %s %s, indx %s to %s", self.type, self.id, indx, singleVal)
                     self.grid.setValue(self.getRow(indx), self.getCol(indx), singleVal)
 
     def singlePossibleValueRule(self):
         """
-        Applies the single possible value rule to the collection.
+        Applies the single possible value rule to the collection. Applies the single possible value rule to the collection. 
+        It looks for values that can only be in one position in the collection.
         """
         possibleValues = {1:"", 2:"", 3:"", 4:"", 5:"", 6:"", 7:"", 8:"", 9:""}
         for indx in range(9):
@@ -122,15 +125,17 @@ class ElementCollection:
         for indx in range(1,10):
             value = possibleValues.get(indx)
             if value != "x" and value != "" and value != None:
-                self.logger.debug("SPVR: %s %s", self.type, self.id)
-                self.logger.debug("values: \n%s", str(self))
-                self.logger.debug("computed SPVs: %s", possibleValues)
-                self.logger.debug("SPVR in %s %s: %s can only be at position %s", self.type, self.id, indx, value)
+                logger.debug("SPVR: %s %s", self.type, self.id)
+                logger.debug("values: \n%s", str(self))
+                logger.debug("computed SPVs: %s", possibleValues)
+                logger.debug("SPVR in %s %s: %s can only be at position %s", self.type, self.id, indx, value)
                 self.grid.setValue(self.getRow(value), self.getCol(value), indx)
     
     def nakedDoubleValueRule(self):
         """
         Applies the naked double value rule to the collection.
+        2 elements in the collection have the same 2 possible values, 
+        remove those values from all other elements.
         """
         doubleValues = {}
         foundOne = False
@@ -142,7 +147,7 @@ class ElementCollection:
                 if existingValue == None:
                     doubleValues[str(valueTuple)] = 1
                 else:
-                    self.logger.debug("nDVR: in %s, %s found tuple %s", self.type, self.id, str(valueTuple))
+                    logger.debug("nDVR: in %s, %s found tuple %s", self.type, self.id, str(valueTuple))
                     doubleValues[str(valueTuple)] = existingValue+1
                     foundOne = True
         if foundOne:
@@ -153,7 +158,7 @@ class ElementCollection:
                         if not (len(valueList) == 2 and doubleValueKey != (valueList[0], valueList[1])):
                             self.elements[indx].remove(int(doubleValueKey[1]))
                             self.elements[indx].remove(int(doubleValueKey[4]))
-                        self.logger.debug("nDVR: after removal: values are\n%s", str(self.elements[indx].values))
+                        logger.debug("nDVR: after removal: values are\n%s", str(self.elements[indx].values))
     
     def __str__(self):
         """

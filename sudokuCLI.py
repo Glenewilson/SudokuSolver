@@ -21,7 +21,8 @@ def cli(ctx, command):
         print(help_str)
 
 help_str = """
-Sudoku solver - starts with an empty grid. As initial values are set the solver reduces the possible values. Hopefully, after all initial values are set the solver resolves the puzzle.
+Sudoku solver - starts with an empty grid. As initial values are set the solver 
+reduces the possible values. Hopefully, after all initial values are set the solver resolves the puzzle.
 
 valid commands:
 \tset - Set a value.
@@ -84,9 +85,15 @@ def main():
 
 logging.basicConfig(filename='SudokuSolver.log',
                     format='%(asctime)s %(message)s',
-                    filemode='w')
-logger = logging.getLogger()
-logger.setLevel(logging.ERROR)
+                    filemode='w',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
+#handler = logging.StreamHandler()
+#handler.setLevel(logging.INFO)
+#formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#handler.setFormatter(formatter)
+#logger.addHandler(handler)
 
 myGrid = SudokuV1.Grid()
                                     

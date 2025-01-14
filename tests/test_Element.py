@@ -1,10 +1,18 @@
+import queue
 import unittest
+import logging
 from sudoku.Element import Element
+
+logging.basicConfig(filename='SudokuSolver.log',
+                    format='%(asctime)s %(message)s',
+                    filemode='w',
+                    level=logging.DEBUG)
 
 class TestElement(unittest.TestCase):
 
     def setUp(self):
-        self.element = Element(0, 0, None)
+        myqueue = queue.Queue()
+        self.element = Element(0, 0, myqueue)
 
     def test_initial_values(self):
         self.assertEqual(len(self.element.values), 9)
@@ -22,19 +30,20 @@ class TestElement(unittest.TestCase):
 
     def test_set_value(self):
         self.element.set(3)
-        self.assertEqual(self.element.values, {3: True})
-        self.assertTrue(self.element.final)
+        self.assertEqual(self.element.values, {3: ''})
+        self.assertFalse(self.element.final)
 
     def test_is_final_value(self):
         self.element.set(3)
+        self.assertFalse(self.element.isFinalValue(3))
+        self.element.final = True
         self.assertTrue(self.element.isFinalValue(3))
-        self.assertFalse(self.element.isFinalValue(4))
 
     def test_print_third(self):
         self.element.set(3)
-        self.assertEqual(self.element.printThird(1), "   ")
-        self.assertEqual(self.element.printThird(2), " 3 ")
-        self.assertEqual(self.element.printThird(3), "   ")
+        self.assertEqual(self.element.printThird(1), "  3 ")
+        self.assertEqual(self.element.printThird(2), "    ")
+        self.assertEqual(self.element.printThird(3), "    ")
 
 if __name__ == '__main__':
     unittest.main()
