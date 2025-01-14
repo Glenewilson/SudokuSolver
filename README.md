@@ -13,6 +13,5 @@ It only supports a CLI.
 - [x] better arrange rules
 - [x] consider event log
 - create a simple web interface
--- possibly just the queue, but don't remove values?
 - [] think about strategy to support bifurcation
 -- lowest priority, want to get all else done first.
